@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-alt-tab"
+version = "0.2.0"
+description = "저시력 친화 Windows Alt+Tab 대체 창 전환기"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []  # 표준 라이브러리만 사용 (ctypes, tkinter)
+
+[project.scripts]
+smart-alt-tab = "smart_alt_tab.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
