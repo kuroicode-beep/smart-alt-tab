@@ -17,7 +17,7 @@ import tkinter as tk
 
 from .switcher import Switcher
 from .win import hook as hk
-from .win.windows import WindowInfo, activate_window, list_windows
+from .win.windows import WindowInfo, activate_window, is_alt_down, list_windows
 
 _ALT_KEYS = frozenset({hk.VK_MENU, hk.VK_LMENU, hk.VK_RMENU})
 _SHIFT_KEYS = frozenset({hk.VK_SHIFT, hk.VK_LSHIFT, hk.VK_RSHIFT})
@@ -68,7 +68,8 @@ class Controller:
         if down:
             if vk == hk.VK_TAB and self._alt_down:
                 if not self._active:
-                    self._begin()
+                    if not self._begin():
+                        return False  # 열린 창 없음 → 소비 안 함(기본 Alt+Tab 폴백)
                 else:
                     self._move(-1 if self._shift_down else +1)
                 self._gen += 1
@@ -85,11 +86,12 @@ class Controller:
         return False
 
     # -- 세션 로직 (콜백 컨텍스트, ctypes만 사용) --------------------------
-    def _begin(self) -> None:
+    def _begin(self) -> bool:
+        """세션 시작. 열린 창이 있으면 True, 없으면 False(호출부에서 미소비)."""
         self._windows = list_windows()  # ctypes(EnumWindows) — Tcl 아님, 안전
         if not self._windows:
             self._active = False
-            return
+            return False
         self._active = True
         # 기본 선택: 첫 Tab은 "이전 창"(index 1), Shift면 마지막 창
         if len(self._windows) == 1:
@@ -98,6 +100,7 @@ class Controller:
             self._selected = len(self._windows) - 1
         else:
             self._selected = 1
+        return True
 
     def _move(self, delta: int) -> None:
         if not self._windows:
@@ -119,6 +122,10 @@ class Controller:
     # -- 폴러 (mainloop 스레드, Tcl 안전) ---------------------------------
     def _poll(self) -> None:
         try:
+            # 0) 끼임 방지 워치독: 세션 중인데 Alt가 실제로는 놓였으면(=keyup 유실)
+            #    선택을 확정해 오버레이가 남지 않게 한다.
+            if self._active and not is_alt_down():
+                self._commit()
             # 1) 대기 중인 창 전환 처리
             hwnd = self._pending_commit
             if hwnd is not None:

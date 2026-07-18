@@ -36,23 +36,31 @@ def make_controller(monkeypatch_calls):
     return root, c
 
 
-def run(events, *, shift_start=False):
-    """이벤트 시퀀스를 주입하고 (controller, consumed리스트, switched리스트) 반환."""
+def run(events, *, windows=FAKE, alt_down=False, poll=True):
+    """이벤트 시퀀스를 주입하고 (controller, consumed리스트, switched리스트) 반환.
+
+    windows: list_windows 스텁 반환값. alt_down: 워치독용 is_alt_down 스텁 값.
+    poll: 끝에 _poll을 1회 돌려 대기 전환/워치독을 mainloop처럼 처리할지.
+    """
     switched = []
     orig_list = ctrl.list_windows
     orig_act = ctrl.activate_window
-    ctrl.list_windows = lambda: list(FAKE)
+    orig_alt = ctrl.is_alt_down
+    ctrl.list_windows = lambda: list(windows)
     ctrl.activate_window = lambda hwnd: switched.append(hwnd) or True
+    ctrl.is_alt_down = lambda: alt_down
     try:
         root = tk.Tk()
         root.withdraw()
         c = Controller(root, FakeSwitcher())
         consumed = [c.on_key(msg, vk) for msg, vk in events]
-        c._poll()  # 대기 중인 전환(activate_window)을 mainloop 문맥처럼 1회 처리
+        if poll:
+            c._poll()  # 대기 전환/워치독을 mainloop 문맥처럼 1회 처리
         root.destroy()
     finally:
         ctrl.list_windows = orig_list
         ctrl.activate_window = orig_act
+        ctrl.is_alt_down = orig_alt
     return c, consumed, switched
 
 
@@ -148,6 +156,38 @@ def test_tab_without_alt_is_ignored():
     assert consumed == [False]
     assert c._active is False
     assert switched == []
+
+
+def test_no_windows_does_not_consume():
+    # 열린 창이 없으면 Tab을 소비하지 않아 기본 Alt+Tab이 동작해야 함
+    c, consumed, switched = run([
+        (DN, hk.VK_LMENU),
+        (DN, hk.VK_TAB),
+    ], windows=[])
+    assert consumed[-1] is False, consumed
+    assert c._active is False
+    assert switched == []
+
+
+def test_watchdog_commits_when_alt_released_without_keyup():
+    # Alt keyup 이벤트를 못 받은 상태(active 유지) → 폴러 워치독이 확정
+    c, consumed, switched = run([
+        (DN, hk.VK_LMENU),
+        (DN, hk.VK_TAB),   # sel=1, active
+        # Alt keyup 이벤트 없음
+    ], alt_down=False)      # 실제 Alt는 놓임 → 워치독 발동
+    assert switched == [FAKE[1].hwnd], switched
+    assert c._active is False
+
+
+def test_watchdog_does_not_fire_while_alt_held():
+    # Alt를 아직 잡고 있으면 워치독은 확정하지 않는다
+    c, consumed, switched = run([
+        (DN, hk.VK_LMENU),
+        (DN, hk.VK_TAB),
+    ], alt_down=True)
+    assert switched == []      # 아직 확정 안 됨
+    assert c._active is True
 
 
 def test_enter_commits_immediately():

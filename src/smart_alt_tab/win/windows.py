@@ -21,6 +21,18 @@ WS_EX_NOACTIVATE = 0x08000000
 DWMWA_CLOAKED = 14
 SW_RESTORE = 9
 SW_SHOW = 5
+MONITOR_DEFAULTTONEAREST = 2
+VK_MENU = 0x12  # Alt
+
+
+class RECT(ctypes.Structure):
+    _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG),
+                ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+
+
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", RECT),
+                ("rcWork", RECT), ("dwFlags", wintypes.DWORD)]
 
 # --- 프로토타입 ---------------------------------------------------------
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -56,6 +68,17 @@ _GetWindowLongPtr = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
 _GetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int]
 _GetWindowLongPtr.restype = ctypes.c_ssize_t
 
+user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+user32.GetCursorPos.restype = wintypes.BOOL
+user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+user32.MonitorFromPoint.restype = wintypes.HMONITOR
+user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+user32.MonitorFromWindow.restype = wintypes.HMONITOR
+user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+user32.GetMonitorInfoW.restype = wintypes.BOOL
+user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+user32.GetAsyncKeyState.restype = ctypes.c_short
+
 dwmapi.DwmGetWindowAttribute.argtypes = [
     wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
 ]
@@ -89,19 +112,34 @@ def _is_cloaked(hwnd: int) -> bool:
     return val.value != 0
 
 
+def _root_owner_representative(hwnd: int) -> int:
+    """소유 체인을 올라가며 '보이는 마지막 활성 팝업'을 찾는다(Raymond Chen 규칙).
+
+    Alt+Tab에는 각 소유 그룹의 대표 창 하나만 나와야 한다. 대화상자를 띄운 앱은
+    대화상자가 대표가 되도록 GetLastActivePopup을 반복 추적한다.
+    """
+    walk = 0
+    try_hwnd = user32.GetAncestor(hwnd, GA_ROOTOWNER)
+    while try_hwnd != walk:
+        walk = try_hwnd
+        try_hwnd = user32.GetLastActivePopup(walk)
+        if user32.IsWindowVisible(try_hwnd):
+            break
+    return walk
+
+
 def _is_alt_tab_window(hwnd: int) -> bool:
-    """표준 Alt+Tab 목록 규칙으로 대상 여부 판정."""
+    """표준 Alt+Tab 목록 규칙으로 대상 여부 판정(정교화)."""
     if not user32.IsWindowVisible(hwnd):
+        return False
+
+    # 소유 그룹의 대표 창이 자신이어야 함(중복/유령 제거)
+    if _root_owner_representative(hwnd) != hwnd:
         return False
 
     ex_style = _GetWindowLongPtr(hwnd, GWL_EXSTYLE)
     # 강제 노출(APPWINDOW)이 아니면서 도구창이면 제외
     if (ex_style & WS_EX_TOOLWINDOW) and not (ex_style & WS_EX_APPWINDOW):
-        return False
-
-    # 소유 체인의 루트에서 마지막 활성 팝업이 자신이어야 대표 창
-    root = user32.GetAncestor(hwnd, GA_ROOTOWNER)
-    if user32.GetLastActivePopup(root) != hwnd:
         return False
 
     if not _get_title(hwnd):
@@ -156,6 +194,30 @@ def activate_window(hwnd: int) -> bool:
         if attached_fg:
             user32.AttachThreadInput(cur_tid, fg_tid, False)
     return ok
+
+
+def cursor_workarea() -> tuple[int, int, int, int]:
+    """커서가 있는 모니터의 작업영역 (left, top, width, height). 실패 시 주 모니터."""
+    pt = wintypes.POINT()
+    try:
+        if user32.GetCursorPos(ctypes.byref(pt)):
+            hmon = user32.MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+            mi = MONITORINFO()
+            mi.cbSize = ctypes.sizeof(MONITORINFO)
+            if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+                r = mi.rcWork
+                return (r.left, r.top, r.right - r.left, r.bottom - r.top)
+    except OSError:
+        pass
+    # 폴백: 주 모니터 전체
+    sw = user32.GetSystemMetrics(0) if hasattr(user32, "GetSystemMetrics") else 1920
+    sh = user32.GetSystemMetrics(1) if hasattr(user32, "GetSystemMetrics") else 1080
+    return (0, 0, sw, sh)
+
+
+def is_alt_down() -> bool:
+    """Alt 키가 실제로 눌려 있는지(실시간). 끼임 방지 워치독용."""
+    return bool(user32.GetAsyncKeyState(VK_MENU) & 0x8000)
 
 
 if __name__ == "__main__":

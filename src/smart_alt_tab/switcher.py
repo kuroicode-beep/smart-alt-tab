@@ -10,7 +10,7 @@ from __future__ import annotations
 import tkinter as tk
 import tkinter.font as tkfont
 
-from .win.windows import WindowInfo
+from .win.windows import WindowInfo, cursor_workarea
 
 # --- SVIL 색상 토큰 (하드코딩 금지 규칙 → 이 모듈에서 토큰으로 관리) ----------
 BG = "#0d0d12"
@@ -93,9 +93,10 @@ class Switcher:
         if not windows:
             self.hide()
             return
-        # 화면 밖으로 넘치지 않도록 고정 너비 계산 → 제목은 이 폭에 맞춰 잘라낸다
-        sw = self._win.winfo_screenwidth()
-        self._overlay_w = max(720, min(int(sw * 0.82), 1280))
+        # 커서가 있는 모니터의 작업영역 기준으로 폭·위치 계산(다중 모니터 대응)
+        self._area = cursor_workarea()  # (left, top, width, height)
+        area_w = self._area[2]
+        self._overlay_w = max(640, min(int(area_w * 0.82), 1280))
         self._render_rows(windows, selected)
         self._footer.config(text=f"{selected + 1} / {len(windows)}   ·   Alt 놓기=전환  Esc=취소")
         self._win.update_idletasks()
@@ -188,13 +189,13 @@ class Switcher:
         return text[:lo] + ell
 
     def _place(self) -> None:
-        """고정 너비로, 화면 안에 완전히 들어오도록 배치(상단 1/3)."""
+        """고정 너비로, 커서 모니터 작업영역 안에 완전히 들어오도록 배치(상단 1/3)."""
         self._win.update_idletasks()
+        ax, ay, aw, ah = getattr(self, "_area", (0, 0,
+                                                 self._win.winfo_screenwidth(),
+                                                 self._win.winfo_screenheight()))
         w = getattr(self, "_overlay_w", self._win.winfo_width())
-        h = self._win.winfo_reqheight()
-        sw = self._win.winfo_screenwidth()
-        sh = self._win.winfo_screenheight()
-        h = min(h, int(sh * 0.9))
-        x = max(0, (sw - w) // 2)
-        y = max(0, (sh - h) // 3)
+        h = min(self._win.winfo_reqheight(), int(ah * 0.9))
+        x = ax + max(0, (aw - w) // 2)
+        y = ay + max(0, (ah - h) // 3)
         self._win.geometry(f"{w}x{h}+{x}+{y}")
