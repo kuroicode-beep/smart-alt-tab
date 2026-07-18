@@ -23,8 +23,9 @@ ACCENT = "#7ec8ff"
 ACCENT_STRONG = "#b3ddff"
 FOCUS = "#ffd479"
 
-# 본문 글꼴 우선순위(로컬 번들 우선, 없으면 시스템 폴백)
-_BODY_FAMILIES = ["KyoboHandwriting2019", "Pretendard", "Malgun Gothic"]
+# 본문 글꼴 우선순위 — 저시력 가독성 위해 실제 '헤비 웨이트' 폰트 사용
+# (bold 합성 금지 규칙: 아래는 모두 자체 굵은 패밀리라 합성이 아님)
+_BODY_FAMILIES = ["나눔고딕 ExtraBold", "Noto Sans KR Black", "Malgun Gothic"]
 _MONO_FAMILIES = ["Consolas", "D2Coding", "monospace"]
 
 MAX_VISIBLE = 9  # 한 화면에 보일 행 수 (초과분은 위/아래 인디케이터)
