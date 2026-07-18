@@ -3,9 +3,9 @@
 Windows Alt+Tab을 대체하는 저시력 친화 창 전환기. 큰 글씨·고대비로 열린 창을 보여주고,
 Alt 홀드 중 Tab/방향키로 고른 뒤 Alt를 놓으면 그 창으로 전환한다.
 
-- 현재 버전: **v0.2.0** (M1: 전환기 동작)
+- 현재 버전: **v0.2.1** (M1 + 안정화)
 - 로컬: `C:\Projects\smart-alt-tab`
-- 상태: M1 구현·검증 완료(훅 소비·선택 이동·전환·오버레이), M2 예정
+- 상태: M1 구현·검증 완료(훅 소비·선택 이동·전환·오버레이), 크래시 안정화 완료, M2 예정
 
 ## 왜 별도 프로젝트인가
 
@@ -20,6 +20,11 @@ Windows Alt+Tab은 전환기 내부 하이라이트 이동을 표준 API로 노�
   이어야 설치된다(cdecl이면 실패). 훅에서 `return 1`로 기본 Alt+Tab을 막을 수 있다.
 - **저수준 키보드 훅은 시스템 전역** — 콜백은 최소 작업만. 무거운 처리는 별도 스레드/`after`로.
   훅 실패·예외 시 기본 Alt+Tab으로 폴백, ESC로 취소하는 안전장치 필수.
+- **훅 콜백에서 tkinter/Tcl 호출 금지(치명적, 실측)** — LL 훅은 Tcl 메시지 펌프 도중 재진입
+  호출되므로 콜백에서 `after`/위젯 등 Tcl을 건드리면 Python 스레드 상태가 깨져 간헐적으로
+  프로세스가 죽는다(GIL: thread state is NULL). 콜백은 순수 파이썬 상태만 갱신하고, UI 렌더·
+  창 전환은 mainloop 문맥에서 도는 폴러(`root.after` 재무장)가 그 상태를 읽어 처리한다.
+  콜백과 폴러는 같은 스레드에서 번갈아 실행돼 락이 필요 없다. (`controller.py` 참고)
 - **창 목록**: `EnumWindows` + 표준 필터 — `IsWindowVisible` + `GetLastActivePopup(GetAncestor
   (hwnd, GA_ROOTOWNER)) == hwnd` + not `WS_EX_TOOLWINDOW` + not DWM cloaked(`DWMWA_CLOAKED`).
 - **DPI**: per-monitor v2를 첫 Tk 창 전에 선언, 크기는 논리 px → 물리 px 환산.

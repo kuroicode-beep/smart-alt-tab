@@ -48,6 +48,7 @@ def run(events, *, shift_start=False):
         root.withdraw()
         c = Controller(root, FakeSwitcher())
         consumed = [c.on_key(msg, vk) for msg, vk in events]
+        c._poll()  # 대기 중인 전환(activate_window)을 mainloop 문맥처럼 1회 처리
         root.destroy()
     finally:
         ctrl.list_windows = orig_list

@@ -44,11 +44,9 @@ def main() -> int:
     print(f"smart-alt-tab v{APP_VERSION} 실행 중 (DPI: {dpi_mode}).")
     print("Alt+Tab을 눌러 전환기를 여세요. 종료: 이 창에서 Ctrl+C.")
 
-    # 콘솔 Ctrl+C가 mainloop 중에도 처리되도록 주기적 틱
-    def _tick() -> None:
-        root.after(200, _tick)
-
-    root.after(200, _tick)
+    # 폴러 시작: 훅 콜백이 올린 상태를 mainloop 문맥에서 안전하게 렌더·전환.
+    # (Ctrl+C도 주기적으로 깨어나는 이 폴러 덕에 mainloop 중 처리된다.)
+    controller.start()
 
     try:
         root.mainloop()

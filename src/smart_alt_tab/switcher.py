@@ -88,14 +88,17 @@ class Switcher:
 
     # -- 표시 -------------------------------------------------------------
     def show(self, windows: list[WindowInfo], selected: int) -> None:
-        """목록·선택을 반영해 오버레이를 그리고 화면 중앙에 띄운다."""
+        """목록·선택을 반영해 오버레이를 그리고 화면 안에 띄운다."""
         if not windows:
             self.hide()
             return
+        # 화면 밖으로 넘치지 않도록 고정 너비 계산 → 제목은 이 폭에 맞춰 잘라낸다
+        sw = self._win.winfo_screenwidth()
+        self._overlay_w = max(720, min(int(sw * 0.82), 1280))
         self._render_rows(windows, selected)
         self._footer.config(text=f"{selected + 1} / {len(windows)}   ·   Alt 놓기=전환  Esc=취소")
         self._win.update_idletasks()
-        self._center()
+        self._place()
         self._win.deiconify()
         self._win.lift()
         self._win.attributes("-topmost", True)
@@ -138,7 +141,7 @@ class Switcher:
                 fg=ACCENT if is_sel else TEXT_SUB,
             )
             title_lbl.config(
-                text=marker + _clip(w.title),
+                text=marker + self._fit(w.title),
                 bg=SURFACE_2 if is_sel else SURFACE,
                 fg=TEXT if is_sel else TEXT_SUB,
             )
@@ -166,17 +169,31 @@ class Switcher:
             frame, _, _ = self._row_widgets.pop()
             frame.destroy()
 
-    def _center(self) -> None:
+    def _fit(self, text: str, marker_px: int = 0) -> str:
+        """제목을 오버레이 폭에 맞춰 픽셀 단위로 잘라낸다(넘치면 …)."""
+        text = text.replace("\n", " ").strip()
+        # 번호열·마커·좌우 여백을 제외한 제목 가용 폭
+        avail = getattr(self, "_overlay_w", 1024) - 130
+        if self._f_row.measure(text) <= avail:
+            return text
+        ell = "…"
+        lo, hi = 0, len(text)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if self._f_row.measure(text[:mid] + ell) <= avail:
+                lo = mid
+            else:
+                hi = mid - 1
+        return text[:lo] + ell
+
+    def _place(self) -> None:
+        """고정 너비로, 화면 안에 완전히 들어오도록 배치(상단 1/3)."""
         self._win.update_idletasks()
-        w = self._win.winfo_width()
-        h = self._win.winfo_height()
+        w = getattr(self, "_overlay_w", self._win.winfo_width())
+        h = self._win.winfo_reqheight()
         sw = self._win.winfo_screenwidth()
         sh = self._win.winfo_screenheight()
-        x = (sw - w) // 2
-        y = (sh - h) // 3
-        self._win.geometry(f"+{x}+{y}")
-
-
-def _clip(text: str, limit: int = 64) -> str:
-    text = text.replace("\n", " ").strip()
-    return text if len(text) <= limit else text[: limit - 1] + "…"
+        h = min(h, int(sh * 0.9))
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 3)
+        self._win.geometry(f"{w}x{h}+{x}+{y}")
