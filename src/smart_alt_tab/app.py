@@ -7,6 +7,7 @@ tkinter mainloop가 Windows 메시지를 펌프하므로 메인 스레드에 설
 
 from __future__ import annotations
 
+import os
 import sys
 import tkinter as tk
 
@@ -17,7 +18,32 @@ from .win.dpi import set_dpi_awareness
 from .win.hook import KeyboardHook
 
 
+def log_path() -> str:
+    """무콘솔(pythonw)·자동실행 시 진단용 로그 파일 경로."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "smart-alt-tab")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "app.log")
+
+
+def _ensure_output() -> None:
+    """pythonw로 실행되면 sys.stdout/stderr가 None이라 print()가 죽는다.
+    이 경우 로그 파일로 우회해 크래시를 막고 진단을 남긴다."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        f = open(log_path(), "a", encoding="utf-8", buffering=1)
+    except OSError:
+        f = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = f
+    if sys.stderr is None:
+        sys.stderr = f
+
+
 def main() -> int:
+    _ensure_output()  # 무콘솔 실행 대비(첫 print 전에)
+
     if not sys.platform.startswith("win"):
         print("smart-alt-tab은 Windows 전용입니다.", file=sys.stderr)
         return 2
