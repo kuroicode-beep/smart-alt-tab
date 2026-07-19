@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>smart-alt-tab — 저시력 친화 창 전환기</title>
+<meta name="description" content="Windows Alt+Tab을 대체하는 저시력 친화 창 전환기. 큰 글씨·고대비로 열린 창을 보여주고, Alt 홀드 중 골라 놓으면 전환합니다.">
+<meta property="og:title" content="smart-alt-tab — 저시력 친화 창 전환기">
+<meta property="og:description" content="Windows Alt+Tab을 큰 글씨·고대비로 대체하는 창 전환기.">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --bg:#0d0d12; --surface:#16161d; --surface-2:#1f1f2a;
+    --border:#3a3a48; --border-strong:#6b6b82;
+    --text:#f5f5f7; --text-sub:#c9c9d4;
+    --accent:#7ec8ff; --accent-strong:#b3ddff; --accent-max:#d6ecff;
+    --positive:#7ee2a8; --warning:#ffd479; --focus:#ffd479;
+    --mono:"Consolas","D2Coding",ui-monospace,monospace;
+    --body:"NanumGothic ExtraBold","나눔고딕 ExtraBold","Malgun Gothic","맑은 고딕",
+           "Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--body); font-size:18px; line-height:1.8;
+    letter-spacing:.01em; word-break:keep-all;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:880px; margin:0 auto; padding:0 22px}
+  a{color:var(--accent); text-decoration:none}
+  a:hover{color:var(--accent-max); text-decoration:underline}
+  a:focus-visible,.btn:focus-visible{outline:3px solid var(--focus); outline-offset:3px; border-radius:8px}
+  code,.mono{font-family:var(--mono); font-size:.95em}
+
+  header{padding:64px 0 40px; text-align:center}
+  .badge{
+    display:inline-block; font-family:var(--mono); font-size:15px;
+    color:var(--accent); border:1.5px solid var(--accent);
+    border-radius:999px; padding:4px 14px; margin-bottom:22px;
+  }
+  h1{font-size:2.6rem; line-height:1.25; margin:0 0 14px; color:var(--text)}
+  h1 .hl{color:var(--accent-strong)}
+  .tagline{font-size:1.25rem; color:var(--text-sub); margin:0 auto; max-width:620px}
+
+  .shot{margin:34px auto 0; max-width:820px}
+  .shot img{
+    width:100%; height:auto; display:block; border-radius:16px;
+    border:1px solid var(--border); box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  .shot figcaption{margin-top:12px; font-size:15px; color:var(--text-sub); text-align:center}
+
+  .cta{margin:34px 0 8px; display:flex; gap:14px; justify-content:center; flex-wrap:wrap}
+  .btn{
+    display:inline-flex; align-items:center; min-height:50px; padding:0 26px;
+    border-radius:12px; font-size:1.05rem; font-family:var(--body);
+  }
+  .btn-primary{background:var(--accent-strong); color:#000; border:2px solid var(--accent-strong)}
+  .btn-primary:hover{background:var(--accent-max); text-decoration:none}
+  .btn-ghost{background:var(--surface-2); color:var(--text); border:2px solid var(--border-strong)}
+  .btn-ghost:hover{border-color:var(--accent); color:var(--accent-strong); text-decoration:none}
+  .btn[aria-disabled="true"]{opacity:.6; cursor:default; pointer-events:none}
+  .soon{font-family:var(--mono); font-size:13px; color:var(--warning); margin-left:8px}
+
+  section{padding:40px 0; border-top:1px solid var(--border)}
+  h2{font-size:1.7rem; margin:0 0 18px; color:var(--text)}
+  h3{font-size:1.2rem; margin:0 0 6px; color:var(--accent-strong)}
+  p{margin:0 0 14px; color:var(--text-sub)}
+  .lead{color:var(--text)}
+
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px; margin-top:8px}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px 24px}
+  .card p{margin:0}
+
+  ol.steps{margin:0; padding-left:0; list-style:none; counter-reset:step}
+  ol.steps li{counter-increment:step; position:relative; padding:14px 0 14px 46px; border-bottom:1px solid var(--border)}
+  ol.steps li:last-child{border-bottom:0}
+  ol.steps li::before{
+    content:counter(step); position:absolute; left:0; top:12px;
+    width:32px; height:32px; border-radius:50%;
+    background:var(--surface-2); border:2px solid var(--accent);
+    color:var(--accent); font-family:var(--mono); font-size:15px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  pre{
+    background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:10px; padding:14px 16px; overflow-x:auto; margin:8px 0 0;
+  }
+  pre code{color:var(--text); font-size:.98em}
+  .note{background:var(--surface); border:1px solid var(--warning); border-radius:12px; padding:16px 18px; color:var(--text-sub)}
+  .note b{color:var(--warning)}
+
+  table.ver{width:100%; border-collapse:collapse; margin-top:6px}
+  table.ver th,table.ver td{text-align:left; padding:12px 10px; border-bottom:1px solid var(--border); vertical-align:top}
+  table.ver th{color:var(--text-sub); font-size:14px; font-weight:normal}
+  table.ver td.v{font-family:var(--mono); color:var(--accent); white-space:nowrap; width:88px}
+  table.ver td.d{font-family:var(--mono); color:var(--text-sub); white-space:nowrap; width:118px; font-size:14px}
+
+  footer{padding:44px 0 60px; text-align:center; color:var(--text-sub); font-size:15px; border-top:1px solid var(--border)}
+  footer .mono{color:var(--text-sub)}
+
+  @media (max-width:560px){
+    h1{font-size:2rem} .tagline{font-size:1.1rem} body{font-size:17px}
+  }
+  @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <span class="badge">v0.3.1 · Windows 10 / 11</span>
+    <h1><span class="hl">smart-alt-tab</span><br>저시력 친화 창 전환기</h1>
+    <p class="tagline">Windows 기본 Alt+Tab을 <b>큰 글씨·고대비</b>로 대체합니다.
+      Alt를 누른 채 Tab·방향키로 고르고, 놓으면 그 창으로 전환됩니다.</p>
+    <figure class="shot">
+      <img src="screenshot.png" alt="smart-alt-tab 전환기 화면: 어두운 배경에 흰 큰 글씨로 열린 창 목록이 나열되고, 선택된 항목은 파란 테두리와 삼각형 표시로 강조된 모습">
+      <figcaption>어두운 배경 · 두꺼운 큰 글씨 · 선택은 테두리+마커+색으로 표시</figcaption>
+    </figure>
+    <div class="cta">
+      <a class="btn btn-ghost" href="https://github.com/kuroicode-beep/smart-alt-tab">GitHub 저장소</a>
+      <span class="btn btn-primary" aria-disabled="true">다운로드 <span class="soon">준비 중</span></span>
+    </div>
+  </div>
+</header>
+
+<main>
+<section id="why">
+  <div class="wrap">
+    <h2>왜 만들었나</h2>
+    <p class="lead">Windows 기본 Alt+Tab은 창 제목 글씨가 작아, 저시력 사용자가 "지금 어느 창인지"
+      알아보기 어렵습니다.</p>
+    <p>게다가 Alt+Tab 전환기 내부의 하이라이트 이동은 표준 API로 공개되지 않아(실측 확인),
+      "고르는 중 실시간으로 크게 보기"는 Alt+Tab을 통째로 대체해야만 가능합니다.
+      smart-alt-tab이 바로 그 대체 전환기입니다.</p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>주요 기능</h2>
+    <div class="grid">
+      <div class="card"><h3>큰 글씨·고대비</h3><p>어두운 배경에 두꺼운 큰 글씨로 열린 창을 보여줍니다. 색만이 아니라 테두리·마커로도 선택을 표시합니다.</p></div>
+      <div class="card"><h3>익숙한 조작</h3><p>Alt 홀드 중 Tab / Shift+Tab / 방향키로 이동, Alt를 놓으면 전환. Esc로 취소, Enter로 즉시 확정.</p></div>
+      <div class="card"><h3>다중 모니터</h3><p>커서가 있는 모니터의 작업영역 중앙에 전환기를 띄웁니다.</p></div>
+      <div class="card"><h3>정확한 창 목록</h3><p>소유 팝업 체인을 추적해 대표 창만 표시 — 유령 창·중복 없이 깔끔하게.</p></div>
+      <div class="card"><h3>안전장치</h3><p>열린 창이 없으면 기본 Alt+Tab으로 자동 폴백, 키 유실 시에도 오버레이가 남지 않게 자동 확정.</p></div>
+      <div class="card"><h3>DPI 인식</h3><p>per-monitor v2 DPI로 고배율 화면에서도 또렷하게 렌더합니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="run">
+  <div class="wrap">
+    <h2>사용법 (현재)</h2>
+    <p>아직 배포용 실행 파일(exe)은 준비 중입니다. 지금은 Python으로 실행합니다.</p>
+    <ol class="steps">
+      <li><b>Python 3.11+ 설치</b> (표준 라이브러리만 사용 — 별도 패키지 불필요)</li>
+      <li><b>저장소 내려받기</b><pre><code>git clone https://github.com/kuroicode-beep/smart-alt-tab.git</code></pre></li>
+      <li><b>실행</b><pre><code>py -3.13 run.py</code></pre></li>
+      <li>Alt를 <b>누른 채</b> Tab·방향키로 고르고 놓으면 전환됩니다.</li>
+    </ol>
+    <p style="margin-top:18px" class="note"><b>배포 예정:</b> 콘솔창 없는 exe와 다운로드는
+      다음 업데이트에서 이 페이지에 추가됩니다.</p>
+  </div>
+</section>
+
+<section id="a11y">
+  <div class="wrap">
+    <h2>접근성</h2>
+    <p>SVIL 저시력 접근성 기준을 따릅니다 — 고대비 다크, 두꺼운 큰 글씨(나눔고딕 ExtraBold),
+      색상만으로 상태를 구분하지 않고 테두리·텍스트 라벨 병행, DPI 인식, 과한 모션 지양.</p>
+  </div>
+</section>
+
+<section id="history">
+  <div class="wrap">
+    <h2>업데이트 내역</h2>
+    <table class="ver">
+      <tr><td class="v">v0.3.1</td><td class="d">2026-07-19</td><td>자동 실행(시작프로그램) 지원 · 무콘솔 실행 안정화</td></tr>
+      <tr><td class="v">v0.3.0</td><td class="d">2026-07-19</td><td>M2 — 창 필터 정교화 · 다중 모니터 배치 · 안전장치 강화</td></tr>
+      <tr><td class="v">v0.2.2</td><td class="d">2026-07-19</td><td>본문 글꼴을 두꺼운 헤비 웨이트로 교체(가독성)</td></tr>
+      <tr><td class="v">v0.2.1</td><td class="d">2026-07-19</td><td>훅 콜백 재진입 크래시 안정화 · 오버레이 화면 안 배치</td></tr>
+      <tr><td class="v">v0.2.0</td><td class="d">2026-07-19</td><td>M1 — Alt+Tab 가로채기 · 텍스트 전환기 · 선택 이동·전환</td></tr>
+    </table>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built by <b>SVIL</b> — Singularity Visual Intelligence Lab · 라이선스 MIT(예정)</p>
+    <p class="mono"><a href="https://github.com/kuroicode-beep/smart-alt-tab">github.com/kuroicode-beep/smart-alt-tab</a></p>
+  </div>
+</footer>
+</body>
+</html>
