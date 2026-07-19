@@ -1,10 +1,30 @@
 # src/smart_alt_tab/win/dpi.py
-"""per-monitor v2 DPI 인식 선언. 첫 Tk 창 생성 전에 호출해야 한다."""
+"""per-monitor v2 DPI 인식 선언 + 논리 px → 물리 px 환산.
+
+첫 Tk 창 생성 전에 set_dpi_awareness()를 호출해야 한다. Tk 자체의 폰트 스케일링은
+프로세스 전체 DPI만 따라가고 모니터 이동 시 실시간으로 갱신되지 않으므로, 화면에 그릴 때마다
+대상 모니터 DPI를 직접 조회해 픽셀 단위(Tk 음수 폰트 크기)로 환산해 그린다.
+"""
+
+from __future__ import annotations
 
 import ctypes
+from ctypes import wintypes
 
-# DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4 (핸들 값)
-_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
+user32 = ctypes.WinDLL("user32", use_last_error=True)
+shcore = ctypes.WinDLL("shcore", use_last_error=True)
+
+_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+MONITOR_DEFAULTTONEAREST = 2
+MDT_EFFECTIVE_DPI = 0
+BASE_DPI = 96
+
+user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+user32.MonitorFromPoint.restype = wintypes.HMONITOR
+shcore.GetDpiForMonitor.argtypes = [
+    wintypes.HMONITOR, ctypes.c_int, ctypes.POINTER(wintypes.UINT), ctypes.POINTER(wintypes.UINT),
+]
+shcore.GetDpiForMonitor.restype = ctypes.c_long  # HRESULT
 
 
 def set_dpi_awareness() -> str:
@@ -12,22 +32,18 @@ def set_dpi_awareness() -> str:
 
     최신 API부터 단계적으로 시도 → 실패 시 하위 호환 폴백.
     """
-    # 1) Windows 10 1703+ : per-monitor v2 (권장)
     try:
-        user32 = ctypes.windll.user32
         if user32.SetProcessDpiAwarenessContext(_PER_MONITOR_AWARE_V2):
             return "per-monitor-v2"
     except (AttributeError, OSError):
         pass
-    # 2) Windows 8.1+ : PROCESS_PER_MONITOR_DPI_AWARE = 2
     try:
-        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+        if shcore.SetProcessDpiAwareness(2) == 0:
             return "per-monitor"
     except (AttributeError, OSError):
         pass
-    # 3) Vista+ : system DPI aware
     try:
-        if ctypes.windll.user32.SetProcessDPIAware():
+        if user32.SetProcessDPIAware():
             return "system"
     except (AttributeError, OSError):
         pass
@@ -35,21 +51,25 @@ def set_dpi_awareness() -> str:
 
 
 def get_dpi_for_point(x: int, y: int) -> int:
-    """지정 좌표가 속한 모니터의 DPI(가로)를 반환. 실패 시 96(=100%)."""
+    """지정 좌표가 속한 모니터의 DPI(가로)를 반환. 실패 시 96(=100%, 무배율)."""
     try:
-        MONITOR_DEFAULTTONEAREST = 2
-        MDT_EFFECTIVE_DPI = 0
-        pt = ctypes.wintypes.POINT(x, y) if hasattr(ctypes, "wintypes") else None
-        if pt is None:
-            import ctypes.wintypes as wt  # noqa: F401
-            pt = ctypes.wintypes.POINT(x, y)
-        hmon = ctypes.windll.user32.MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
-        dpi_x = ctypes.c_uint()
-        dpi_y = ctypes.c_uint()
-        if ctypes.windll.shcore.GetDpiForMonitor(
-            hmon, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x), ctypes.byref(dpi_y)
-        ) == 0:
+        pt = wintypes.POINT(x, y)
+        hmon = user32.MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+        dpi_x = wintypes.UINT()
+        dpi_y = wintypes.UINT()
+        hr = shcore.GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
+        if hr == 0:
             return int(dpi_x.value)
     except (AttributeError, OSError):
         pass
-    return 96
+    return BASE_DPI
+
+
+def scale_for_point(x: int, y: int) -> float:
+    """해당 좌표 모니터의 DPI 배율(96dpi=1.0 기준)."""
+    return get_dpi_for_point(x, y) / BASE_DPI
+
+
+def logical_to_physical_px(logical_px: int, scale: float) -> int:
+    """논리 px(96dpi 기준)를 주어진 배율의 물리 px로 환산."""
+    return max(1, round(logical_px * scale))

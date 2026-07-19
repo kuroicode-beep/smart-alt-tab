@@ -3,6 +3,11 @@
 
 SVIL 디자인 토큰 적용: 큰 글씨, 색상만으로 상태 구분 금지(선택은 테두리+색+마커).
 선택 이동만 반응하도록 화면 갱신은 controller가 호출한다.
+
+DPI: Tk 자체의 폰트 스케일은 프로세스 시작 시 한 번(대개 주 모니터 기준) 고정되어 다중
+모니터 간 이동에 실시간으로 따라오지 않는다. 그래서 매 표시(show)마다 대상 모니터의 실제
+DPI를 조회해 논리 px(96dpi 기준)를 물리 px로 직접 환산하고, Tk 음수 폰트 크기(= 픽셀 단위)로
+그린다(`win/dpi.py`).
 """
 
 from __future__ import annotations
@@ -10,6 +15,9 @@ from __future__ import annotations
 import tkinter as tk
 import tkinter.font as tkfont
 
+from .config import Config, available_fonts
+from .i18n import t
+from .win.dpi import logical_to_physical_px, scale_for_point
 from .win.windows import WindowInfo, cursor_workarea
 
 # --- SVIL 색상 토큰 (하드코딩 금지 규칙 → 이 모듈에서 토큰으로 관리) ----------
@@ -23,12 +31,12 @@ ACCENT = "#7ec8ff"
 ACCENT_STRONG = "#b3ddff"
 FOCUS = "#ffd479"
 
-# 본문 글꼴 우선순위 — 저시력 가독성 위해 실제 '헤비 웨이트' 폰트 사용
-# (bold 합성 금지 규칙: 아래는 모두 자체 굵은 패밀리라 합성이 아님)
-_BODY_FAMILIES = ["나눔고딕 ExtraBold", "Noto Sans KR Black", "Malgun Gothic"]
+# 설정에서 고른 글꼴이 어떤 이유로든 못 잡히면 순서대로 폴백(모두 실제 패밀리, 합성 아님)
+_BODY_FALLBACK = ["나눔고딕 ExtraBold", "Noto Sans KR Black", "Malgun Gothic"]
 _MONO_FAMILIES = ["Consolas", "D2Coding", "monospace"]
 
 MAX_VISIBLE = 9  # 한 화면에 보일 행 수 (초과분은 위/아래 인디케이터)
+MIN_LOGICAL_PX = 12  # SVIL 최소 폰트 크기 (배율 적용 전 논리 px 기준)
 
 
 def _pick_family(candidates: list[str], available: set[str], default: str) -> str:
@@ -41,21 +49,28 @@ def _pick_family(candidates: list[str], available: set[str], default: str) -> st
 class Switcher:
     """숨김 상태로 대기하다 show()로 나타나는 오버레이."""
 
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, config: Config | None = None) -> None:
         self._root = root
+        self._config = config or Config.load()
+        self._font_map = dict(available_fonts(root))  # {표시이름: 실제설치패밀리}
+        available = set(tkfont.families(root))
+        self._mono_family = _pick_family(_MONO_FAMILIES, available, "TkFixedFont")
+
         self._win = tk.Toplevel(root)
         self._win.withdraw()
         self._win.overrideredirect(True)  # 타이틀바 제거
         self._win.attributes("-topmost", True)
         self._win.configure(bg=BG)
 
-        available = set(tkfont.families(root))
-        body = _pick_family(_BODY_FAMILIES, available, "TkDefaultFont")
-        mono = _pick_family(_MONO_FAMILIES, available, "TkFixedFont")
-        self._f_title = tkfont.Font(family=body, size=26)
-        self._f_row = tkfont.Font(family=body, size=22)
-        self._f_num = tkfont.Font(family=mono, size=16)
-        self._f_hint = tkfont.Font(family=body, size=14)
+        # 초기 폰트(1.0배율=96dpi 가정)로 생성 — show()에서 대상 모니터 배율로 재조정
+        self._f_title = tkfont.Font(size=-20)
+        self._f_row = tkfont.Font(size=-20)
+        self._f_num = tkfont.Font(size=-16)
+        self._f_hint = tkfont.Font(size=-14)
+        self._built_scale: float | None = None
+        self._built_font_label: str | None = None
+        self._built_size: str | None = None
+        self._apply_fonts(scale=1.0)
 
         # 바깥 테두리(강조 보더) → 안쪽 컨테이너
         self._frame = tk.Frame(
@@ -65,7 +80,7 @@ class Switcher:
         self._frame.pack(fill="both", expand=True)
 
         self._header = tk.Label(
-            self._frame, text="창 전환", font=self._f_title,
+            self._frame, font=self._f_title,
             bg=SURFACE, fg=ACCENT_STRONG, anchor="w", padx=24, pady=(0),
         )
         self._header.pack(fill="x", padx=0, pady=(18, 4))
@@ -87,18 +102,30 @@ class Switcher:
 
         self._row_widgets: list[tuple[tk.Frame, tk.Label, tk.Label]] = []
 
+    # -- 설정 반영 ----------------------------------------------------------
+    def apply_config(self, config: Config) -> None:
+        """설정 화면에서 저장한 값을 실행 중인 오버레이에 즉시 반영."""
+        self._config = config
+        self._built_font_label = None  # 다음 show()에서 강제로 폰트 재조정
+
     # -- 표시 -------------------------------------------------------------
     def show(self, windows: list[WindowInfo], selected: int) -> None:
         """목록·선택을 반영해 오버레이를 그리고 화면 안에 띄운다."""
         if not windows:
             self.hide()
             return
-        # 커서가 있는 모니터의 작업영역 기준으로 폭·위치 계산(다중 모니터 대응)
+        # 커서가 있는 모니터의 작업영역 기준으로 폭·위치·DPI 계산(다중 모니터 대응)
         self._area = cursor_workarea()  # (left, top, width, height)
-        area_w = self._area[2]
-        self._overlay_w = max(640, min(int(area_w * 0.82), 1280))
+        ax, ay, aw, ah = self._area
+        scale = scale_for_point(ax + aw // 2, ay + ah // 2)
+        self._apply_fonts(scale)
+        self._overlay_w = max(640, min(int(aw * 0.82), 1280))
+
+        lang = self._config.lang
+        self._header.config(text=t("switcher_header", lang))
         self._render_rows(windows, selected)
-        self._footer.config(text=f"{selected + 1} / {len(windows)}   ·   Alt 놓기=전환  Esc=취소")
+        hint = t("switcher_hint", lang)
+        self._footer.config(text=f"{selected + 1} / {len(windows)}   ·   {hint}")
         self._win.update_idletasks()
         self._place()
         self._win.deiconify()
@@ -108,8 +135,38 @@ class Switcher:
     def hide(self) -> None:
         self._win.withdraw()
 
+    # -- 내부: 폰트/DPI ------------------------------------------------------
+    def _apply_fonts(self, scale: float) -> None:
+        """설정된 글꼴·크기를 대상 모니터 배율(scale)에 맞춰 물리 px로 재조정.
+
+        Font 오브젝트를 새로 만들지 않고 configure()로 갱신 — 이미 그 Font를 쓰는
+        모든 위젯에 자동 반영된다(같은 세션 중 재조정 시 위젯을 일일이 안 건드려도 됨).
+        """
+        label = self._config.font_label
+        family = self._font_map.get(label)
+        if not family:
+            available = set(tkfont.families(self._root))
+            family = _pick_family(_BODY_FALLBACK, available, "TkDefaultFont")
+        size = self._config.size
+
+        if (self._built_scale == scale and self._built_font_label == label
+                and self._built_size == size):
+            return
+        self._built_scale, self._built_font_label, self._built_size = scale, label, size
+
+        base = self._config.size_px()  # 논리 px (예: 18)
+
+        def px(logical: int) -> int:
+            return -logical_to_physical_px(max(MIN_LOGICAL_PX, logical), scale)
+
+        self._f_title.configure(family=family, size=px(base + 8))
+        self._f_row.configure(family=family, size=px(base + 4))
+        self._f_num.configure(family=self._mono_family, size=px(base - 2))
+        self._f_hint.configure(family=family, size=px(base - 4))
+
     # -- 내부 -------------------------------------------------------------
     def _render_rows(self, windows: list[WindowInfo], selected: int) -> None:
+        lang = self._config.lang
         # 선택이 항상 보이도록 표시 구간 계산
         total = len(windows)
         if total <= MAX_VISIBLE:
@@ -121,7 +178,7 @@ class Switcher:
         # 위/아래 숨은 개수 인디케이터 (색만 아닌 텍스트로)
         above, below = start, total - end
         if above:
-            self._up_hint.config(text=f"▲ 위로 {above}개 더")
+            self._up_hint.config(text=t("more_above", lang, n=above))
             self._up_hint.pack(fill="x", after=self._header)
         else:
             self._up_hint.pack_forget()
@@ -149,7 +206,7 @@ class Switcher:
             )
 
         if below:
-            self._down_hint.config(text=f"▼ 아래로 {below}개 더")
+            self._down_hint.config(text=t("more_below", lang, n=below))
             self._down_hint.pack(fill="x", before=self._footer)
         else:
             self._down_hint.pack_forget()

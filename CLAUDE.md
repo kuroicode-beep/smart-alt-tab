@@ -3,9 +3,10 @@
 Windows Alt+Tab을 대체하는 저시력 친화 창 전환기. 큰 글씨·고대비로 열린 창을 보여주고,
 Alt 홀드 중 Tab/방향키로 고른 뒤 Alt를 놓으면 그 창으로 전환한다.
 
-- 현재 버전: **v0.3.0** (M2)
+- 현재 버전: **v0.4.0** (M3)
 - 로컬: `C:\Projects\smart-alt-tab`
-- 상태: M1·M2 완료(훅 소비·선택 이동·전환·오버레이, 필터 정교화·다중 모니터·안전장치), M3 예정
+- 상태: M1·M2·M3 완료(훅 소비·선택 이동·전환·오버레이, 필터 정교화·다중 모니터·안전장치,
+  설정 화면·트레이·DPI 정밀화). 다음은 백로그(썸네일 미리보기, M4).
 
 ## 왜 별도 프로젝트인가
 
@@ -25,9 +26,17 @@ Windows Alt+Tab은 전환기 내부 하이라이트 이동을 표준 API로 노�
   프로세스가 죽는다(GIL: thread state is NULL). 콜백은 순수 파이썬 상태만 갱신하고, UI 렌더·
   창 전환은 mainloop 문맥에서 도는 폴러(`root.after` 재무장)가 그 상태를 읽어 처리한다.
   콜백과 폴러는 같은 스레드에서 번갈아 실행돼 락이 필요 없다. (`controller.py` 참고)
-- **창 목록**: `EnumWindows` + 표준 필터 — `IsWindowVisible` + `GetLastActivePopup(GetAncestor
-  (hwnd, GA_ROOTOWNER)) == hwnd` + not `WS_EX_TOOLWINDOW` + not DWM cloaked(`DWMWA_CLOAKED`).
-- **DPI**: per-monitor v2를 첫 Tk 창 전에 선언, 크기는 논리 px → 물리 px 환산.
+- **창 목록**: `EnumWindows` + 표준 필터 — `IsWindowVisible` + 소유 팝업 체인 워크(`GetAncestor
+  (GA_ROOTOWNER)` → `GetLastActivePopup` 반복)로 대표 창만 + not `WS_EX_TOOLWINDOW` + not DWM
+  cloaked(`DWMWA_CLOAKED`).
+- **DPI**: per-monitor v2를 첫 Tk 창 전에 선언(`win/dpi.py`). Tk 자체 폰트 스케일은 프로세스
+  시작 시 한 번 고정돼 모니터 이동에 실시간으로 안 따라오므로, 오버레이·설정창은 매 표시마다
+  대상 모니터 DPI를 직접 조회해 논리 px(96dpi 기준)를 물리 px로 환산하고 Tk 음수 폰트 크기
+  (=픽셀 단위)로 그린다.
+- **트레이 아이콘 WNDPROC은 LL 훅과 달리 tkinter 호출 안전**(실측) — `Shell_NotifyIconW`
+  메시지는 Tk의 mainloop가 이미 돌리는 표준 `DispatchMessage` 경로로 들어오므로(Tcl 이벤트
+  펌프의 일부), LL 키보드 훅처럼 그 바깥에서 비동기 재진입하는 게 아니다. `win/tray.py`의
+  WNDPROC에서 설정창을 직접 열어도(`deiconify()`) 안전 — 위 "훅 콜백 Tcl 금지"와는 다른 경로.
 
 ## 스택
 
@@ -37,11 +46,16 @@ audio-hotkeys에서 검증된 스택을 계승.
 ## 규칙
 
 **버전**: SemVer, `VERSION` 파일 + 코드 `APP_VERSION`/`VERSION_HISTORY`. 상세는 `VERSIONING.md`.
-UI가 생기면 설정에 "업데이트 내역" 메뉴로 버전별 요약 표시.
+설정 창 하단에 "업데이트 내역" 섹션으로 버전별 요약 표시(구현됨, `settings_window.py`).
 
-**접근성 (SVIL 공통, 예외 없음)**: 고대비 다크, 큰 글씨, 색상만으로 상태 구분 금지(테두리+색),
-교보손글씨2019 본문·Consolas 숫자, DPI 인식, `prefers_reduced_motion` 존중. 정본은
-`/svil-frontend-design` 스킬.
+**접근성 (SVIL 공통, 예외 없음)**: 고대비 다크, 큰 글씨, 색상만으로 상태 구분 금지(테두리+색+
+체크마커), 본문 글꼴은 저시력 가독성 위해 헤비 웨이트(나눔고딕 ExtraBold 기본, 실제 설치된
+것만 선택지 노출), Consolas 숫자, DPI 인식. 정본은 `/svil-frontend-design` 스킬.
+
+**설정(§2.1, 구현됨)**: 글꼴·글자 크기·다국어 3항목 필수 — `config.py`(영속화)·`i18n.py`
+(5개 언어: 한국어·English·日本語·中文·Tiếng Việt)·`settings_window.py`(UI, 선택 즉시 저장·
+적용, 별도 저장 버튼 없음). 글꼴은 SVIL 8종 후보 중 시스템에 실재하는 것만 노출(현재 3종:
+나눔고딕·교보손글씨2019·고딕) — 새 글꼴을 설치하면 자동으로 목록에 나타난다.
 
 **문서 이중 저장**: 완료보고서·요청문서는 두 곳에 동시 저장 —
 1. 로컬 `C:\Projects\smart-alt-tab\docs\reports\` (성격에 맞는 하위 폴더)
