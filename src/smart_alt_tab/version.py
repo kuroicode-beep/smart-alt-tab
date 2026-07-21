@@ -1,10 +1,13 @@
 # src/smart_alt_tab/version.py
 """버전 상수와 업데이트 내역 (SemVer). VERSION 파일과 동기 유지."""
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.4.1"
 
 # (버전, 날짜 YYYY-MM-DD, 요약) — 최신순
 VERSION_HISTORY = [
+    ("0.4.1", "2026-07-21",
+     "버그수정: 일부 앱(Cursor 등 Electron 저무결성 렌더러 창)으로 전환 안 되던 문제 수정 — "
+     "AttachThreadInput이 무결성 수준 차이로 ACCESS_DENIED 나는 경우를 더미 키 입력 방식으로 우회"),
     ("0.4.0", "2026-07-19",
      "M3: 설정 화면 추가(글꼴 3종·글자 크기 3단계·다국어 5종, 선택 즉시 저장·적용), 트레이 아이콘(설정·종료), "
      "설정 안 업데이트 내역 메뉴, DPI 논리→물리 px 정밀 환산(모니터별 실시간 재조정)"),

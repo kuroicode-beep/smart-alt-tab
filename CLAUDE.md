@@ -3,7 +3,7 @@
 Windows Alt+Tab을 대체하는 저시력 친화 창 전환기. 큰 글씨·고대비로 열린 창을 보여주고,
 Alt 홀드 중 Tab/방향키로 고른 뒤 Alt를 놓으면 그 창으로 전환한다.
 
-- 현재 버전: **v0.4.0** (M3)
+- 현재 버전: **v0.4.1** (M3 + 전환 실패 버그수정)
 - 로컬: `C:\Projects\smart-alt-tab`
 - 상태: M1·M2·M3 완료(훅 소비·선택 이동·전환·오버레이, 필터 정교화·다중 모니터·안전장치,
   설정 화면·트레이·DPI 정밀화). 다음은 백로그(썸네일 미리보기, M4).
@@ -33,6 +33,13 @@ Windows Alt+Tab은 전환기 내부 하이라이트 이동을 표준 API로 노�
   시작 시 한 번 고정돼 모니터 이동에 실시간으로 안 따라오므로, 오버레이·설정창은 매 표시마다
   대상 모니터 DPI를 직접 조회해 논리 px(96dpi 기준)를 물리 px로 환산하고 Tk 음수 폰트 크기
   (=픽셀 단위)로 그린다.
+- **일부 앱(Electron 등)으로 전환 안 됨 — 무결성 수준 차이(실측, 2026-07-21)**: Cursor 같은
+  Electron 앱의 창은 렌더러가 **저무결성(Low integrity)**으로 뜬다. 우리 프로세스(Medium)가
+  `AttachThreadInput`으로 그 스레드에 붙으려 하면 `ERROR_ACCESS_DENIED`(5)로 실패해
+  `SetForegroundWindow` 폴백까지 같이 실패한다 — `activate_window`에 디버그 프린트를 넣어
+  실측으로 확인. 해결: `AttachThreadInput` 전에 **더미 키 입력**(`VK_F15` press+release, 아무
+  앱도 기본 바인딩 없음)을 주입해 "방금 입력을 받은 스레드" 자격을 얻은 뒤 `SetForegroundWindow`
+  재시도 — 이 방식은 무결성 수준과 무관하게 통과한다(`_inject_dummy_key`, `win/windows.py`).
 - **트레이 아이콘 WNDPROC은 LL 훅과 달리 tkinter 호출 안전**(실측) — `Shell_NotifyIconW`
   메시지는 Tk의 mainloop가 이미 돌리는 표준 `DispatchMessage` 경로로 들어오므로(Tcl 이벤트
   펌프의 일부), LL 키보드 훅처럼 그 바깥에서 비동기 재진입하는 게 아니다. `win/tray.py`의

@@ -23,6 +23,8 @@ SW_RESTORE = 9
 SW_SHOW = 5
 MONITOR_DEFAULTTONEAREST = 2
 VK_MENU = 0x12  # Alt
+VK_F15 = 0x7E  # 아무 앱도 기본 바인딩이 없는 여분 키 — 더미 입력용(부작용 없음)
+KEYEVENTF_KEYUP = 0x0002
 
 
 class RECT(ctypes.Structure):
@@ -62,6 +64,8 @@ user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BO
 user32.AttachThreadInput.restype = wintypes.BOOL
 user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+user32.keybd_event.argtypes = [ctypes.c_ubyte, ctypes.c_ubyte, wintypes.DWORD, ctypes.c_void_p]
+user32.keybd_event.restype = None
 
 # 64bit 안전한 GetWindowLongPtrW (32bit 파이썬이면 GetWindowLongW 폴백)
 _GetWindowLongPtr = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
@@ -165,15 +169,38 @@ def list_windows() -> list[WindowInfo]:
     return result
 
 
+def _inject_dummy_key() -> None:
+    """포그라운드 락 우회용 더미 키 입력.
+
+    SetForegroundWindow는 기본적으로 "가장 최근에 입력을 받은 스레드"에서 호출해야
+    통과된다. 우리 스레드는 LL 훅으로 키를 관찰만 할 뿐 그 입력을 실제로 받는 스레드가
+    아니라서(포커스는 대상 앱에 있음) 이 조건을 만족하지 못한다. 아무 앱에도 기본
+    바인딩이 없는 VK_F15로 press+release를 주입하면 시각적 부작용 없이 우리 스레드가
+    "방금 입력을 받은" 자격을 얻어 SetForegroundWindow가 통과한다.
+    """
+    user32.keybd_event(VK_F15, 0, 0, None)
+    user32.keybd_event(VK_F15, 0, KEYEVENTF_KEYUP, None)
+
+
 def activate_window(hwnd: int) -> bool:
-    """지정 창을 포그라운드로. 최소화면 복원. 실패 시 AttachThreadInput 우회."""
+    """지정 창을 포그라운드로. 최소화면 복원. 실패 시 더미 입력→재시도, 그다음
+    AttachThreadInput 우회.
+
+    AttachThreadInput은 대상이 우리와 다른 무결성 수준(예: Electron 계열 앱의 저무결성
+    렌더러 창)이면 ERROR_ACCESS_DENIED로 실패한다(실측 — Cursor 대상 재현). 더미 입력
+    방식은 그 제약을 받지 않아 더 안정적이므로 AttachThreadInput보다 먼저 시도한다.
+    """
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, SW_RESTORE)
 
     if user32.SetForegroundWindow(hwnd):
         return True
 
-    # --- 폴백: 포그라운드 스레드에 입력을 붙여 권한 우회 ---
+    _inject_dummy_key()
+    if user32.SetForegroundWindow(hwnd):
+        return True
+
+    # --- 최종 폴백: 포그라운드 스레드에 입력을 붙여 권한 우회(동일 무결성 수준일 때만) ---
     fg = user32.GetForegroundWindow()
     cur_tid = kernel32.GetCurrentThreadId()
     fg_tid = user32.GetWindowThreadProcessId(fg, None) if fg else 0
