@@ -1,10 +1,13 @@
 # src/smart_alt_tab/version.py
 """버전 상수와 업데이트 내역 (SemVer). VERSION 파일과 동기 유지."""
 
-APP_VERSION = "0.4.2"
+APP_VERSION = "0.4.3"
 
 # (버전, 날짜 YYYY-MM-DD, 요약) — 최신순
 VERSION_HISTORY = [
+    ("0.4.3", "2026-07-24",
+     "진단 로그 개선: 각 줄에 타임스탬프·실행 권한(관리자/일반)·PID 기록, 로그 경로를 "
+     "환경변수 대신 Windows API로 확정, 무콘솔 실행 시 같은 줄이 두 번 쌓이던 중복 제거"),
     ("0.4.2", "2026-07-23",
      "관리자 권한 앱(Cursor 등) 전환 지원: 전환기를 관리자 권한으로 자동 실행하는 작업 스케줄러 "
      "등록 스크립트 추가(scripts/install_admin_autostart.ps1). 일반 권한으로는 관리자 앱의 "
