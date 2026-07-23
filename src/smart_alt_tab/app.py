@@ -66,13 +66,19 @@ def log_path() -> str:
     return os.path.join(d, "app.log")
 
 
+# stdout/stderr가 로그 파일로 리다이렉트됐는지 — log()의 이중 기록을 막는 데 쓴다.
+_stdout_is_logfile = False
+
+
 def _ensure_output() -> None:
     """pythonw로 실행되면 sys.stdout/stderr가 None이라 print()가 죽는다.
     이 경우 로그 파일로 우회해 크래시를 막는다."""
+    global _stdout_is_logfile
     if sys.stdout is not None and sys.stderr is not None:
         return
     try:
         f = open(log_path(), "a", encoding="utf-8", buffering=1)
+        _stdout_is_logfile = True
     except OSError:
         f = open(os.devnull, "w")
     if sys.stdout is None:
@@ -82,13 +88,12 @@ def _ensure_output() -> None:
 
 
 def log(msg: str, *, error: bool = False) -> None:
-    """진단 메시지를 **항상 로그 파일에** 남기고, 쓸 수 있으면 콘솔에도 출력한다.
+    """진단 메시지를 로그 파일에 남기고, 콘솔이 따로 있으면 콘솔에도 출력한다.
 
-    `_ensure_output()`만으로는 부족하다 — 작업 스케줄러로 실행하면 sys.stdout이
-    None이 아니라 NUL 핸들로 채워져서 `print()` 결과가 어디에도 남지 않는다(실측:
-    관리자 자동 실행 전환 후 app.log가 갱신되지 않음). 그래서 파일 기록은 stdout
-    상태와 무관하게 별도로 수행한다. 타임스탬프를 붙여 오래된 로그를 최신 실행으로
-    착각하지 않게 한다.
+    타임스탬프를 붙이는 게 핵심이다 — 없으면 오래된 로그를 최신 실행으로 착각한다
+    (실측으로 한 번 헤맸다). 무콘솔 실행에서는 `_ensure_output()`이 stdout을 이미
+    이 파일로 돌려놨으므로, 그때 콘솔 출력까지 하면 같은 줄이 두 번 쌓인다 —
+    `_stdout_is_logfile`로 그 경우를 걸러낸다.
     """
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{stamp}] {msg}"
@@ -97,6 +102,8 @@ def log(msg: str, *, error: bool = False) -> None:
             f.write(line + "\n")
     except OSError:
         pass
+    if _stdout_is_logfile:
+        return  # 이미 같은 파일에 기록했다 — 중복 방지
     stream = sys.stderr if error else sys.stdout
     if stream is not None:
         try:
