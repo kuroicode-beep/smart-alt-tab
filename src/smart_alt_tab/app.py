@@ -23,10 +23,45 @@ from .win.hook import KeyboardHook
 from .win.tray import TrayIcon
 
 
+def _local_appdata() -> str:
+    """LocalAppData 경로를 Windows API로 확정한다.
+
+    `os.environ["LOCALAPPDATA"]`에 의존하면 안 된다 — 작업 스케줄러처럼 전체 사용자
+    환경을 상속하지 않는 컨텍스트에서는 이 변수가 없거나 다른 값일 수 있고, 그러면
+    로그가 엉뚱한 곳에 쓰이거나 조용히 사라진다(실측: 관리자 자동 실행 전환 후
+    app.log가 갱신되지 않음). SHGetKnownFolderPath는 그런 환경에서도 정확하다.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        # FOLDERID_LocalAppData = {F1B32785-6FBA-4FCF-9D55-7B8E7F157091}
+        class GUID(ctypes.Structure):
+            _fields_ = [("d1", wintypes.DWORD), ("d2", wintypes.WORD),
+                        ("d3", wintypes.WORD), ("d4", ctypes.c_ubyte * 8)]
+
+        folder_id = GUID(0xF1B32785, 0x6FBA, 0x4FCF,
+                         (ctypes.c_ubyte * 8)(0x9D, 0x55, 0x7B, 0x8E, 0x7F, 0x15, 0x70, 0x91))
+        path_ptr = ctypes.c_wchar_p()
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        shell32.SHGetKnownFolderPath.argtypes = [
+            ctypes.POINTER(GUID), wintypes.DWORD, wintypes.HANDLE,
+            ctypes.POINTER(ctypes.c_wchar_p),
+        ]
+        if shell32.SHGetKnownFolderPath(ctypes.byref(folder_id), 0, None,
+                                        ctypes.byref(path_ptr)) == 0:
+            value = path_ptr.value
+            ctypes.WinDLL("ole32").CoTaskMemFree(path_ptr)
+            if value:
+                return value
+    except (AttributeError, OSError, ValueError):
+        pass
+    return os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+
+
 def log_path() -> str:
     """무콘솔(pythonw)·자동실행 시 진단용 로그 파일 경로."""
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "smart-alt-tab")
+    d = os.path.join(_local_appdata(), "smart-alt-tab")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, "app.log")
 
