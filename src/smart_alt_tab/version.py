@@ -1,10 +1,14 @@
 # src/smart_alt_tab/version.py
 """버전 상수와 업데이트 내역 (SemVer). VERSION 파일과 동기 유지."""
 
-APP_VERSION = "0.4.1"
+APP_VERSION = "0.4.2"
 
 # (버전, 날짜 YYYY-MM-DD, 요약) — 최신순
 VERSION_HISTORY = [
+    ("0.4.2", "2026-07-23",
+     "관리자 권한 앱(Cursor 등) 전환 지원: 전환기를 관리자 권한으로 자동 실행하는 작업 스케줄러 "
+     "등록 스크립트 추가(scripts/install_admin_autostart.ps1). 일반 권한으로는 관리자 앱의 "
+     "Alt+Tab 감지·포커스 전환이 Windows UIPI로 막히는 제약을 문서화"),
     ("0.4.1", "2026-07-21",
      "버그수정: 일부 앱(Cursor 등 Electron 저무결성 렌더러 창)으로 전환 안 되던 문제 수정 — "
      "AttachThreadInput이 무결성 수준 차이로 ACCESS_DENIED 나는 경우를 더미 키 입력 방식으로 우회"),

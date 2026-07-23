@@ -27,11 +27,27 @@ py -3.13 run.py
 
 Alt+Tab을 누르면 자체 전환기가 뜹니다. 트레이 아이콘을 우클릭하면 설정·종료.
 
-### 자동 실행(시작프로그램 등록)
+### 자동 실행
 
 콘솔창 없이 로그인마다 자동 실행하려면 시작프로그램 폴더에 `pythonw.exe run.py` 바로가기를
 등록하세요(작업폴더는 이 저장소 루트). 무콘솔 실행 시 로그는
 `%LOCALAPPDATA%\smart-alt-tab\app.log`에 남습니다.
+
+### 관리자 권한으로 실행되는 앱을 쓴다면
+
+Cursor·VS Code 등을 **관리자 권한으로 실행**하고 있다면, 일반 권한인 전환기로는 그 앱이
+활성일 때 Alt+Tab을 감지하지도, 그 앱으로 포커스를 넘기지도 못합니다(Windows UIPI 제약이라
+코드로 우회 불가). 이 경우 전환기도 관리자 권한으로 실행해야 합니다:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\install_admin_autostart.ps1
+```
+
+PowerShell을 **관리자 권한으로 실행**한 뒤 위 명령을 실행하면, 작업 스케줄러에 "가장 높은
+권한"으로 등록되어 로그인 시 UAC 창 없이 자동 실행됩니다(기존 시작프로그램 바로가기는
+중복 방지를 위해 자동 제거).
+
+해제: `Unregister-ScheduledTask -TaskName 'smart-alt-tab' -Confirm:$false`
 
 ## 스택
 
