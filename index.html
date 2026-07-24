@@ -60,7 +60,8 @@
   .btn-ghost{background:var(--surface-2); color:var(--text); border:2px solid var(--border-strong)}
   .btn-ghost:hover{border-color:var(--accent); color:var(--accent-strong); text-decoration:none}
   .btn[aria-disabled="true"]{opacity:.6; cursor:default; pointer-events:none}
-  .soon{font-family:var(--mono); font-size:13px; color:var(--warning); margin-left:8px}
+  .btn-primary .meta{font-family:var(--mono); font-size:14px; color:#1a1a1a; margin-left:10px}
+  .cta-note{font-size:16px; color:var(--text-sub); margin:0; text-align:center}
 
   section{padding:40px 0; border-top:1px solid var(--border)}
   h2{font-size:1.7rem; margin:0 0 18px; color:var(--text)}
@@ -108,7 +109,7 @@
 <body>
 <header>
   <div class="wrap">
-    <span class="badge">v0.3.1 · Windows 10 / 11</span>
+    <span class="badge">v0.5.0 · Windows 10 / 11</span>
     <h1><span class="hl">smart-alt-tab</span><br>저시력 친화 창 전환기</h1>
     <p class="tagline">Windows 기본 Alt+Tab을 <b>큰 글씨·고대비</b>로 대체합니다.
       Alt를 누른 채 Tab·방향키로 고르고, 놓으면 그 창으로 전환됩니다.</p>
@@ -117,9 +118,12 @@
       <figcaption>어두운 배경 · 두꺼운 큰 글씨 · 선택은 테두리+마커+색으로 표시</figcaption>
     </figure>
     <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/kuroicode-beep/smart-alt-tab/releases/latest/download/smart-alt-tab.exe">
+        다운로드 <span class="meta">exe · 약 10MB</span></a>
       <a class="btn btn-ghost" href="https://github.com/kuroicode-beep/smart-alt-tab">GitHub 저장소</a>
-      <span class="btn btn-primary" aria-disabled="true">다운로드 <span class="soon">준비 중</span></span>
     </div>
+    <p class="cta-note">설치 과정 없습니다. 받은 파일을 두 번 누르면 바로 실행됩니다.
+      Python도 필요 없습니다.</p>
   </div>
 </header>
 
@@ -145,22 +149,36 @@
       <div class="card"><h3>정확한 창 목록</h3><p>소유 팝업 체인을 추적해 대표 창만 표시 — 유령 창·중복 없이 깔끔하게.</p></div>
       <div class="card"><h3>안전장치</h3><p>열린 창이 없으면 기본 Alt+Tab으로 자동 폴백, 키 유실 시에도 오버레이가 남지 않게 자동 확정.</p></div>
       <div class="card"><h3>DPI 인식</h3><p>per-monitor v2 DPI로 고배율 화면에서도 또렷하게 렌더합니다.</p></div>
+      <div class="card"><h3>내 눈에 맞게</h3><p>트레이 아이콘 우클릭 → 설정에서 글꼴·글자 크기·언어(한국어/English/日本語/中文/Tiếng Việt)를 고르면 바로 적용됩니다.</p></div>
     </div>
   </div>
 </section>
 
 <section id="run">
   <div class="wrap">
-    <h2>사용법 (현재)</h2>
-    <p>아직 배포용 실행 파일(exe)은 준비 중입니다. 지금은 Python으로 실행합니다.</p>
+    <h2>사용법</h2>
     <ol class="steps">
-      <li><b>Python 3.11+ 설치</b> (표준 라이브러리만 사용 — 별도 패키지 불필요)</li>
-      <li><b>저장소 내려받기</b><pre><code>git clone https://github.com/kuroicode-beep/smart-alt-tab.git</code></pre></li>
-      <li><b>실행</b><pre><code>py -3.13 run.py</code></pre></li>
-      <li>Alt를 <b>누른 채</b> Tab·방향키로 고르고 놓으면 전환됩니다.</li>
+      <li><b>내려받기</b> — 위 <b>다운로드</b> 버튼을 누르면 <code>smart-alt-tab.exe</code> 하나만 받습니다.</li>
+      <li><b>실행</b> — 받은 파일을 두 번 누르면 끝. 설치도, 검은 콘솔 창도 없습니다.
+        작업 표시줄 오른쪽 트레이에 아이콘이 생기고, 우클릭하면 설정·종료가 있습니다.</li>
+      <li><b>사용</b> — Alt를 <b>누른 채</b> Tab·방향키로 고르고, Alt를 놓으면 그 창으로 전환됩니다.
+        Esc로 취소합니다.</li>
     </ol>
-    <p style="margin-top:18px" class="note"><b>배포 예정:</b> 콘솔창 없는 exe와 다운로드는
-      다음 업데이트에서 이 페이지에 추가됩니다.</p>
+
+    <h3 style="margin:26px 0 8px">로그인할 때 자동으로 켜지게 하려면</h3>
+    <p>저장소를 내려받은 뒤, <b>PowerShell을 관리자 권한으로 실행</b>해서:</p>
+    <pre><code>powershell -ExecutionPolicy Bypass -File scripts\install_admin_autostart.ps1</code></pre>
+    <p style="margin-top:10px">작업 스케줄러에 등록되어, 다음 로그인부터 UAC 창 없이 자동으로 켜집니다.</p>
+
+    <p style="margin-top:18px" class="note"><b>Cursor·VS Code를 관리자 권한으로 쓰신다면:</b>
+      위 자동 실행 등록이 필요합니다. 일반 권한으로 켜진 전환기는 Windows 보안 정책(UIPI) 때문에
+      관리자 권한 앱이 활성일 때 Alt+Tab을 감지하지 못합니다.</p>
+
+    <h3 style="margin:26px 0 8px">소스로 실행 (개발용)</h3>
+    <pre><code>git clone https://github.com/kuroicode-beep/smart-alt-tab.git
+py -3.13 run.py</code></pre>
+    <p style="margin-top:10px">Python 3.11+ 만 있으면 됩니다 — 표준 라이브러리만 사용하므로
+      별도 패키지 설치가 필요 없습니다.</p>
   </div>
 </section>
 
@@ -176,7 +194,12 @@
   <div class="wrap">
     <h2>업데이트 내역</h2>
     <table class="ver">
-      <tr><td class="v">v0.3.1</td><td class="d">2026-07-19</td><td>자동 실행(시작프로그램) 지원 · 무콘솔 실행 안정화</td></tr>
+      <tr><td class="v">v0.5.0</td><td class="d">2026-07-24</td><td>콘솔창 없는 단일 exe 배포 — Python 설치 없이 파일 하나로 실행</td></tr>
+      <tr><td class="v">v0.4.3</td><td class="d">2026-07-24</td><td>진단 로그 개선 — 타임스탬프 · 실행 권한 · 중복 기록 수정</td></tr>
+      <tr><td class="v">v0.4.2</td><td class="d">2026-07-23</td><td>관리자 권한 앱(Cursor 등) 전환 지원 — 관리자 자동 실행 등록 스크립트</td></tr>
+      <tr><td class="v">v0.4.1</td><td class="d">2026-07-21</td><td>일부 앱으로 전환되지 않던 문제 수정</td></tr>
+      <tr><td class="v">v0.4.0</td><td class="d">2026-07-19</td><td>M3 — 설정 화면(글꼴·크기·5개 언어) · 트레이 아이콘 · DPI 정밀화</td></tr>
+      <tr><td class="v">v0.3.1</td><td class="d">2026-07-19</td><td>자동 실행 지원 · 무콘솔 실행 안정화</td></tr>
       <tr><td class="v">v0.3.0</td><td class="d">2026-07-19</td><td>M2 — 창 필터 정교화 · 다중 모니터 배치 · 안전장치 강화</td></tr>
       <tr><td class="v">v0.2.2</td><td class="d">2026-07-19</td><td>본문 글꼴을 두꺼운 헤비 웨이트로 교체(가독성)</td></tr>
       <tr><td class="v">v0.2.1</td><td class="d">2026-07-19</td><td>훅 콜백 재진입 크래시 안정화 · 오버레이 화면 안 배치</td></tr>
