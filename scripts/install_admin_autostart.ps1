@@ -18,6 +18,7 @@ $ErrorActionPreference = "Stop"
 $TaskName = "smart-alt-tab"
 $RepoRoot = "C:\Projects\smart-alt-tab"
 $RunPy    = Join-Path $RepoRoot "run.py"
+$ExePath  = Join-Path $RepoRoot "dist\smart-alt-tab.exe"
 
 # 관리자 권한 확인
 $isAdmin = ([Security.Principal.WindowsPrincipal] `
@@ -27,16 +28,28 @@ if (-not $isAdmin) {
     throw "관리자 권한이 필요합니다. PowerShell을 '관리자 권한으로 실행'한 뒤 다시 실행하세요."
 }
 
-# pythonw.exe 경로 확인 (콘솔창 없이 실행)
-$pythonw = Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\pythonw.exe"
-if (-not (Test-Path $pythonw)) {
-    $pyCmd = Get-Command pythonw.exe -ErrorAction SilentlyContinue
-    if ($pyCmd) { $pythonw = $pyCmd.Source } else { throw "pythonw.exe를 찾을 수 없습니다: $pythonw" }
+# 실행 방식 결정: 빌드된 exe가 있으면 그쪽을 쓴다(Python 설치에 의존하지 않아 더 안정적).
+# 없으면 기존 방식(pythonw + run.py)으로 폴백한다 — 개발 중에는 exe를 매번 빌드하지 않으므로.
+if (Test-Path $ExePath) {
+    $Execute   = $ExePath
+    $Arguments = $null
+    $ModeLabel = "exe"
+    Write-Output "실행 방식 : exe"
+    Write-Output "exe      : $ExePath"
+} else {
+    $pythonw = Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\pythonw.exe"
+    if (-not (Test-Path $pythonw)) {
+        $pyCmd = Get-Command pythonw.exe -ErrorAction SilentlyContinue
+        if ($pyCmd) { $pythonw = $pyCmd.Source } else { throw "pythonw.exe를 찾을 수 없습니다: $pythonw" }
+    }
+    if (-not (Test-Path $RunPy)) { throw "exe도 run.py도 없습니다. 먼저 scripts\build_exe.ps1로 빌드하세요." }
+    $Execute   = $pythonw
+    $Arguments = "`"$RunPy`""
+    $ModeLabel = "pythonw"
+    Write-Output "실행 방식 : pythonw + run.py (exe가 없어 폴백)"
+    Write-Output "pythonw  : $pythonw"
+    Write-Output "run.py   : $RunPy"
 }
-if (-not (Test-Path $RunPy)) { throw "run.py가 없습니다: $RunPy" }
-
-Write-Output "pythonw : $pythonw"
-Write-Output "run.py  : $RunPy"
 
 # 기존 작업이 있으면 제거 후 재등록
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
@@ -45,7 +58,11 @@ if ($existing) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
 
-$action    = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$RunPy`"" -WorkingDirectory $RepoRoot
+if ($Arguments) {
+    $action = New-ScheduledTaskAction -Execute $Execute -Argument $Arguments -WorkingDirectory $RepoRoot
+} else {
+    $action = New-ScheduledTaskAction -Execute $Execute -WorkingDirectory $RepoRoot
+}
 $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 # 가장 높은 권한(Highest) = 상승된 채 실행, UAC 창 없음
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" `
@@ -68,22 +85,27 @@ if (Test-Path $startupLnk) {
     Write-Output "중복 방지: 기존 시작프로그램 바로가기 제거됨 ($startupLnk)"
 }
 
-# 현재 실행 중인 일반 권한 인스턴스 종료 후 관리자 권한으로 즉시 시작
-Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" |
-    Where-Object { $_.CommandLine -like "*smart-alt-tab*run.py*" } |
-    ForEach-Object {
-        Write-Output "기존 인스턴스 종료: PID $($_.ProcessId)"
-        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    }
+# 실행 중인 인스턴스를 찾는다 — exe로 뜬 것과 pythonw로 뜬 것 양쪽 모두.
+# 실행 방식을 바꾸면 이전 방식의 인스턴스가 남아 중복 동작(훅 두 개)하므로 둘 다 정리해야 한다.
+function Get-SmartAltTabProcess {
+    @(Get-CimInstance Win32_Process -Filter "Name='smart-alt-tab.exe'") +
+    @(Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" |
+        Where-Object { $_.CommandLine -like "*smart-alt-tab*run.py*" })
+}
+
+# 현재 실행 중인 인스턴스 종료 후 관리자 권한으로 즉시 시작
+Get-SmartAltTabProcess | ForEach-Object {
+    Write-Output "기존 인스턴스 종료: PID $($_.ProcessId) ($($_.Name))"
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+}
 Start-Sleep -Milliseconds 700
 
 Start-ScheduledTask -TaskName $TaskName
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
 
-$running = Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" |
-    Where-Object { $_.CommandLine -like "*smart-alt-tab*run.py*" }
+$running = Get-SmartAltTabProcess
 if ($running) {
-    Write-Output "실행 확인: PID $($running.ProcessId) (관리자 권한)"
+    Write-Output "실행 확인: PID $($running[0].ProcessId) ($ModeLabel, 관리자 권한)"
 } else {
     Write-Warning "프로세스가 확인되지 않습니다. 작업 스케줄러에서 '$TaskName' 상태를 확인하세요."
 }

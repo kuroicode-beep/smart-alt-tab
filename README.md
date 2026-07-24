@@ -9,7 +9,7 @@ Alt를 누른 채 Tab/방향키로 고른 뒤 Alt를 놓으면 그 창으로 전
 
 ## 상태
 
-M1·M2·M3 구현·검증 완료 (v0.4.0). 배경과 스펙은 [docs/prd](docs/prd/)를 참고하세요.
+M1·M2·M3 구현·검증 완료, 단일 exe 배포까지 완료 (v0.5.0). 배경과 스펙은 [docs/prd](docs/prd/)를 참고하세요.
 
 - Alt+Tab 가로채기·소비, 고대비 다크 텍스트 전환기, Tab/Shift+Tab/방향키 선택 이동,
   Alt 놓으면 전환, ESC 취소
@@ -21,6 +21,13 @@ M1·M2·M3 구현·검증 완료 (v0.4.0). 배경과 스펙은 [docs/prd](docs/p
 
 ## 실행
 
+### 1. exe로 실행 (Python 설치 불필요, 권장)
+
+[릴리스 페이지](https://github.com/kuroicode-beep/smart-alt-tab/releases/latest)에서
+`smart-alt-tab.exe`를 받아 두 번 누르면 됩니다. 설치 과정도, 검은 콘솔 창도 없습니다.
+
+### 2. 소스로 실행 (개발용)
+
 ```
 py -3.13 run.py
 ```
@@ -29,25 +36,33 @@ Alt+Tab을 누르면 자체 전환기가 뜹니다. 트레이 아이콘을 우�
 
 ### 자동 실행
 
-콘솔창 없이 로그인마다 자동 실행하려면 시작프로그램 폴더에 `pythonw.exe run.py` 바로가기를
-등록하세요(작업폴더는 이 저장소 루트). 무콘솔 실행 시 로그는
-`%LOCALAPPDATA%\smart-alt-tab\app.log`에 남습니다.
-
-### 관리자 권한으로 실행되는 앱을 쓴다면
-
-Cursor·VS Code 등을 **관리자 권한으로 실행**하고 있다면, 일반 권한인 전환기로는 그 앱이
-활성일 때 Alt+Tab을 감지하지도, 그 앱으로 포커스를 넘기지도 못합니다(Windows UIPI 제약이라
-코드로 우회 불가). 이 경우 전환기도 관리자 권한으로 실행해야 합니다:
+로그인할 때마다 자동으로 켜지게 하려면 **PowerShell을 관리자 권한으로 실행**한 뒤:
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts\install_admin_autostart.ps1
 ```
 
-PowerShell을 **관리자 권한으로 실행**한 뒤 위 명령을 실행하면, 작업 스케줄러에 "가장 높은
-권한"으로 등록되어 로그인 시 UAC 창 없이 자동 실행됩니다(기존 시작프로그램 바로가기는
-중복 방지를 위해 자동 제거).
+작업 스케줄러에 등록되어 로그인 시 UAC 창 없이 자동 실행됩니다. `dist\smart-alt-tab.exe`가
+있으면 그것을, 없으면 `pythonw.exe run.py`를 사용합니다. 로그는
+`%LOCALAPPDATA%\smart-alt-tab\app.log`에 남습니다.
 
 해제: `Unregister-ScheduledTask -TaskName 'smart-alt-tab' -Confirm:$false`
+
+### 관리자 권한으로 실행되는 앱을 쓴다면
+
+Cursor·VS Code 등을 **관리자 권한으로 실행**하고 있다면, 일반 권한인 전환기로는 그 앱이
+활성일 때 Alt+Tab을 감지하지도, 그 앱으로 포커스를 넘기지도 못합니다(Windows UIPI 제약이라
+코드로 우회 불가). 이때는 위 **자동 실행** 등록이 해답입니다 — 작업 스케줄러가 전환기를
+"가장 높은 권한"으로 띄워 주기 때문에 그 제약이 사라집니다.
+
+## exe 직접 빌드하기
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\build_exe.ps1
+```
+
+PyInstaller onefile로 `dist\smart-alt-tab.exe`(약 10MB)를 만듭니다. 사전 준비는
+Python 3.13과 `py -3.13 -m pip install pyinstaller` 뿐입니다.
 
 ## 스택
 

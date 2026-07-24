@@ -1,10 +1,14 @@
 # src/smart_alt_tab/version.py
 """버전 상수와 업데이트 내역 (SemVer). VERSION 파일과 동기 유지."""
 
-APP_VERSION = "0.4.3"
+APP_VERSION = "0.5.0"
 
 # (버전, 날짜 YYYY-MM-DD, 요약) — 최신순
 VERSION_HISTORY = [
+    ("0.5.0", "2026-07-24",
+     "배포: 콘솔창 없는 단일 exe 빌드 지원(scripts/build_exe.ps1, PyInstaller onefile) — "
+     "Python 설치 없이 파일 하나로 실행. 자동 실행 등록도 exe를 우선 사용하도록 변경. "
+     "PRD M4(썸네일 미리보기)는 저시력 가독성을 해쳐 제외 확정"),
     ("0.4.3", "2026-07-24",
      "진단 로그 개선: 각 줄에 타임스탬프·실행 권한(관리자/일반)·PID 기록, 로그 경로를 "
      "환경변수 대신 Windows API로 확정, 무콘솔 실행 시 같은 줄이 두 번 쌓이던 중복 제거"),
